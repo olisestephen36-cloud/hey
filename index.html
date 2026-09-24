@@ -8,4 +8,1782 @@
     <p>This is the first line of HTML.</p>
     <p>click <a href="https://www.google.com">here</a> to visit Google. Yeah.</p>
 </body>
-</html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Neon Dodge</title>
+
+<style>
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #070b18;
+  font-family: system-ui, sans-serif;
+}
+
+body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+}
+
+#game {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  max-width: 900px;
+  max-height: 700px;
+  overflow: hidden;
+  background:
+    radial-gradient(
+      circle at 50% 35%,
+      #18265a 0%,
+      #0b1230 42%,
+      #050814 100%
+    );
+}
+
+canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+#hud {
+  position: absolute;
+  inset: 0 0 auto 0;
+  display: flex;
+  justify-content: space-between;
+  padding: 14px 18px;
+  font-weight: 800;
+  font-size: 18px;
+  text-shadow: 0 2px 8px #000;
+  pointer-events: none;
+  gap: 10px;
+}
+
+#message {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  width: min(90%, 520px);
+  padding: 26px;
+  border: 1px solid #6be7ff66;
+  border-radius: 22px;
+  background: #08102de8;
+  box-shadow: 0 0 35px #00d9ff33;
+}
+
+#message h1 {
+  margin: 0 0 8px;
+  font-size: 42px;
+}
+
+#message p {
+  margin: 8px 0 18px;
+  opacity: .85;
+  line-height: 1.5;
+}
+
+button {
+  border: 0;
+  border-radius: 14px;
+  padding: 13px 22px;
+  font-size: 17px;
+  font-weight: 800;
+  color: #06101d;
+  background: #65e7ff;
+  box-shadow: 0 5px 0 #2399b5;
+  cursor: pointer;
+}
+
+button:active {
+  transform: translateY(3px);
+  box-shadow: 0 2px 0 #2399b5;
+}
+
+#controls {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 18px;
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  pointer-events: none;
+}
+
+.ctrl {
+  pointer-events: auto;
+  width: 74px;
+  height: 58px;
+  border-radius: 18px;
+  border: 1px solid #ffffff22;
+  background: #ffffff12;
+  color: white;
+  font-size: 26px;
+  backdrop-filter: blur(8px);
+}
+
+.hidden {
+  display: none !important;
+}
+
+.small {
+  font-size: 13px;
+  opacity: .65;
+  margin-top: 14px;
+}
+</style>
+</head>
+
+<body>
+
+<div id="game">
+
+  <canvas id="canvas"></canvas>
+
+  <div id="hud">
+    <span id="score">Score: 0</span>
+    <span id="time">Time: 0.0s</span>
+    <span id="bestTime">Best Time: 0.0s</span>
+    <span id="ai">AI: CALM</span>
+    <span id="best">Best: 0</span>
+  </div>
+
+  <div id="message">
+    <h1>NEON DODGE</h1>
+
+    <p>
+      Dodge the falling red meteors.<br>
+      Move with <b>← →</b> or the buttons below.
+    </p>
+
+    <button id="start">START GAME</button>
+
+    <div class="small">
+      Survive as long as you can. The game gets faster!
+    </div>
+  </div>
+
+  <div id="controls">
+    <button class="ctrl" id="left">◀</button>
+    <button class="ctrl" id="right">▶</button>
+  </div>
+
+</div>
+
+<script>
+
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+const scoreEl = document.getElementById("score");
+const bestEl = document.getElementById("best");
+const aiEl = document.getElementById("ai");
+
+let W, H, dpr;
+
+let running = false;
+let last = 0;
+
+let score = 0;
+
+let best = Number(
+  localStorage.neonDodgeBest || 0
+);
+
+let bestTime = Number(
+  localStorage.neonDodgeBestTime || 0
+);
+
+let survivalTime = 0;
+
+let player;
+
+let meteors = [];
+
+let stars = [];
+
+let debris = [];
+
+let scanY = 0;
+
+let keys = {
+  left: false,
+  right: false
+};
+
+let spawnTimer = 0;
+
+let speed = 1;
+
+bestEl.textContent = "Best: " + best;
+
+document.getElementById("bestTime").textContent =
+  "Best Time: " + bestTime.toFixed(1) + "s";
+
+
+/* =========================
+   RESIZE
+========================= */
+
+function resize() {
+
+  dpr = Math.min(
+    devicePixelRatio || 1,
+    2
+  );
+
+  W = canvas.clientWidth;
+  H = canvas.clientHeight;
+
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+
+  ctx.setTransform(
+    dpr,
+    0,
+    0,
+    dpr,
+    0,
+    0
+  );
+
+  if (!player) {
+
+    player = {
+      x: W / 2,
+      y: H - 125,
+      w: 52,
+      h: 52
+    };
+
+  }
+
+}
+
+addEventListener(
+  "resize",
+  resize
+);
+
+resize();
+
+
+/* =========================
+   STARFIELD
+========================= */
+
+function makeStars() {
+
+  stars = Array.from(
+    { length: 220 },
+    () => ({
+
+      x: Math.random() * W,
+
+      y: Math.random() * H,
+
+      r: Math.random() * 1.9 + .35,
+
+      v: Math.random() * 38 + 8,
+
+      seed: Math.random() * 10000,
+
+      kind:
+        Math.random() < .16
+          ? 2
+          : Math.random() < .72
+            ? 1
+            : 0
+
+    })
+  );
+
+  debris = Array.from(
+    { length: 18 },
+    () => ({
+
+      x: Math.random() * W,
+
+      y: Math.random() * H,
+
+      r: Math.random() * 5 + 2,
+
+      v: Math.random() * 14 + 5,
+
+      rot: Math.random() * 6.28,
+
+      vr:
+        (Math.random() - .5) * .8
+
+    })
+  );
+
+}
+
+makeStars();
+
+
+/* =========================
+   RESET GAME
+========================= */
+
+function reset() {
+
+  player = {
+
+    x: W / 2,
+
+    y: H - 125,
+
+    w: 52,
+
+    h: 52
+
+  };
+
+  meteors = [];
+
+  score = 0;
+
+  spawnTimer = 0;
+
+  speed = 1;
+
+  survivalTime = 0;
+
+  last = performance.now();
+
+  scoreEl.textContent =
+    "Score: 0";
+
+  document.getElementById(
+    "time"
+  ).textContent =
+    "Time: 0.0s";
+
+  running = true;
+
+  message.classList.add(
+    "hidden"
+  );
+
+  requestAnimationFrame(loop);
+
+}
+
+
+/* =========================
+   METEOR SPAWNING
+========================= */
+
+function spawn() {
+
+  const ai =
+    1 + Math.min(
+      score / 450,
+      2.6
+    );
+
+  const r =
+    13 +
+    Math.random() *
+    (
+      18 +
+      Math.min(
+        score / 90,
+        8
+      )
+    );
+
+  const fastChance =
+    Math.min(
+      .12 + score / 900,
+      .38
+    );
+
+  const fast =
+    Math.random() <
+    fastChance;
+
+  meteors.push({
+
+    x:
+      r +
+      Math.random() *
+      (W - 2 * r),
+
+    y:
+      -r - 10,
+
+    r: r,
+
+    vy:
+      (
+        175 +
+        Math.random() * 115
+      ) *
+      speed *
+      (fast ? 1.35 : 1),
+
+    rot:
+      Math.random() * 6.28,
+
+    vr:
+      (
+        Math.random() - .5
+      ) *
+      (3 + ai),
+
+    seed:
+      Math.random() * 10000
+
+  });
+
+
+  /* AI AMBUSH */
+
+  const ambushChance =
+    Math.min(
+      .04 + score / 700,
+      .24
+    );
+
+  if (
+    Math.random() <
+    ambushChance
+  ) {
+
+    const r2 =
+      12 +
+      Math.random() * 15;
+
+    const lane =
+      Math.random() < .5
+        ? .25
+        : .75;
+
+    meteors.push({
+
+      x:
+        Math.max(
+          r2,
+          Math.min(
+            W - r2,
+            W * lane +
+            (
+              Math.random() - .5
+            ) * 70
+          )
+        ),
+
+      y:
+        -r2 - 55,
+
+      r:
+        r2,
+
+      vy:
+        (
+          185 +
+          Math.random() * 95
+        ) *
+        speed *
+        1.08,
+
+      rot:
+        Math.random() * 6.28,
+
+      vr:
+        (
+          Math.random() - .5
+        ) * 4,
+
+      seed:
+        Math.random() * 10000
+
+    });
+
+  }
+
+}
+
+
+/* =========================
+   COLLISION
+========================= */
+
+function circleRect(
+  c,
+  p
+) {
+
+  const x =
+    Math.max(
+      p.x - p.w / 2,
+      Math.min(
+        c.x,
+        p.x + p.w / 2
+      )
+    );
+
+  const y =
+    Math.max(
+      p.y - p.h / 2,
+      Math.min(
+        c.y,
+        p.y + p.h / 2
+      )
+    );
+
+  return (
+    (c.x - x) ** 2 +
+    (c.y - y) ** 2
+  ) < c.r ** 2;
+
+}
+
+
+/* =========================
+   BACKGROUND
+========================= */
+
+function drawBackground(dt) {
+
+  ctx.fillStyle =
+    "#050711";
+
+  ctx.fillRect(
+    0,
+    0,
+    W,
+    H
+  );
+
+
+  /* NEBULA */
+
+  const clouds = [
+
+    [
+      W * .18,
+      H * .22,
+      Math.max(W,H) * .34,
+      "rgba(75,45,190,.13)"
+    ],
+
+    [
+      W * .82,
+      H * .38,
+      Math.max(W,H) * .30,
+      "rgba(0,170,255,.10)"
+    ],
+
+    [
+      W * .50,
+      H * .82,
+      Math.max(W,H) * .42,
+      "rgba(255,35,110,.055)"
+    ]
+
+  ];
+
+  for (
+    const [x,y,r,c]
+    of clouds
+  ) {
+
+    const g =
+      ctx.createRadialGradient(
+        x,
+        y,
+        0,
+        x,
+        y,
+        r
+      );
+
+    g.addColorStop(
+      0,
+      c
+    );
+
+    g.addColorStop(
+      1,
+      "rgba(0,0,0,0)"
+    );
+
+    ctx.fillStyle = g;
+
+    ctx.fillRect(
+      0,
+      0,
+      W,
+      H
+    );
+
+  }
+
+
+  /* GRID */
+
+  ctx.save();
+
+  ctx.globalAlpha = .055;
+
+  ctx.strokeStyle =
+    "#8beaff";
+
+  ctx.lineWidth = 1;
+
+  for (
+    let x = 0;
+    x < W;
+    x += 34
+  ) {
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+      x,
+      0
+    );
+
+    ctx.lineTo(
+      x,
+      H
+    );
+
+    ctx.stroke();
+
+  }
+
+  for (
+    let y = 0;
+    y < H;
+    y += 34
+  ) {
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+      0,
+      y
+    );
+
+    ctx.lineTo(
+      W,
+      y
+    );
+
+    ctx.stroke();
+
+  }
+
+  ctx.restore();
+
+
+  /* SCANLINES */
+
+  scanY =
+    (scanY + dt * 42) %
+    12;
+
+  ctx.globalAlpha =
+    .035;
+
+  ctx.fillStyle =
+    "#ffffff";
+
+  for (
+    let y = scanY;
+    y < H;
+    y += 12
+  ) {
+
+    ctx.fillRect(
+      0,
+      y,
+      W,
+      1
+    );
+
+  }
+
+  ctx.globalAlpha = 1;
+
+
+  /* STARS */
+
+  for (
+    const s of stars
+  ) {
+
+    s.y +=
+      s.v *
+      dt *
+      speed;
+
+    s.x +=
+      Math.sin(
+        (s.y + s.seed) *
+        .006
+      ) *
+      dt *
+      7;
+
+    if (
+      s.y >
+      H + 8
+    ) {
+
+      s.y = -8;
+
+      s.x =
+        Math.random() * W;
+
+    }
+
+    if (s.x < 0)
+      s.x = W;
+
+    if (s.x > W)
+      s.x = 0;
+
+
+    const twinkle =
+      .45 +
+      .55 *
+      Math.sin(
+        performance.now() *
+        .004 +
+        s.seed
+      );
+
+    const pulse =
+      1 +
+      Math.sin(
+        performance.now() *
+        .0025 +
+        s.seed
+      ) * .12;
+
+    const tail =
+      Math.min(
+        12,
+        s.v *
+        .055 *
+        speed
+      );
+
+
+    ctx.globalAlpha =
+      .28 +
+      .62 * twinkle;
+
+    ctx.strokeStyle =
+      s.kind === 2
+        ? "#c6d6ff"
+        : "#4dc8ff";
+
+    ctx.fillStyle =
+      s.kind === 2
+        ? "#b9c9ff"
+        : s.kind === 1
+          ? "#39c5ff"
+          : "#78aaff";
+
+    ctx.lineWidth =
+      Math.max(
+        .5,
+        s.r * .7
+      );
+
+
+    /* STAR MOTION TRAIL */
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+      s.x,
+      s.y - tail
+    );
+
+    ctx.lineTo(
+      s.x,
+      s.y
+    );
+
+    ctx.stroke();
+
+
+    ctx.beginPath();
+
+    ctx.arc(
+      s.x,
+      s.y,
+      s.r *
+      pulse *
+      (
+        s.kind === 2
+          ? 1.5
+          : 1
+      ),
+      0,
+      Math.PI * 2
+    );
+
+    ctx.fill();
+
+  }
+
+  ctx.globalAlpha = 1;
+
+
+  /* DISTANT DEBRIS */
+
+  for (
+    const d of debris
+  ) {
+
+    d.y +=
+      d.v *
+      dt *
+      speed *
+      .45;
+
+    d.rot +=
+      d.vr *
+      dt;
+
+    if (
+      d.y >
+      H + 20
+    ) {
+
+      d.y = -20;
+
+      d.x =
+        Math.random() * W;
+
+    }
+
+    ctx.save();
+
+    ctx.translate(
+      d.x,
+      d.y
+    );
+
+    ctx.rotate(
+      d.rot
+    );
+
+    ctx.globalAlpha =
+      .16;
+
+    ctx.strokeStyle =
+      "#b9c8ff";
+
+    ctx.lineWidth = 1;
+
+    ctx.beginPath();
+
+    ctx.arc(
+      0,
+      0,
+      d.r,
+      0,
+      Math.PI * 2
+    );
+
+    ctx.stroke();
+
+    ctx.restore();
+
+  }
+
+  ctx.globalAlpha = 1;
+
+
+  /* VIGNETTE */
+
+  const v =
+    ctx.createRadialGradient(
+      W / 2,
+      H / 2,
+      Math.min(W,H) * .18,
+      W / 2,
+      H / 2,
+      Math.max(W,H) * .72
+    );
+
+  v.addColorStop(
+    0,
+    "rgba(0,0,0,0)"
+  );
+
+  v.addColorStop(
+    .72,
+    "rgba(0,0,0,.08)"
+  );
+
+  v.addColorStop(
+    1,
+    "rgba(0,0,0,.48)"
+  );
+
+  ctx.fillStyle = v;
+
+  ctx.fillRect(
+    0,
+    0,
+    W,
+    H
+  );
+
+}
+
+
+/* =========================
+   PLAYER
+========================= */
+
+function drawPlayer() {
+
+  ctx.save();
+
+  ctx.translate(
+    player.x,
+    player.y
+  );
+
+
+  /* LONG ENERGY TRAIL */
+
+  const trailLen = 170;
+
+  const trail =
+    ctx.createLinearGradient(
+      0,
+      trailLen,
+      0,
+      12
+    );
+
+  trail.addColorStop(
+    0,
+    "rgba(40,220,255,0)"
+  );
+
+  trail.addColorStop(
+    .55,
+    "rgba(60,225,255,.10)"
+  );
+
+  trail.addColorStop(
+    1,
+    "rgba(100,245,255,.65)"
+  );
+
+  ctx.fillStyle =
+    trail;
+
+  ctx.beginPath();
+
+  ctx.moveTo(
+    -13,
+    12
+  );
+
+  ctx.lineTo(
+    -5,
+    trailLen
+  );
+
+  ctx.lineTo(
+    0,
+    trailLen + 12
+  );
+
+  ctx.lineTo(
+    5,
+    trailLen
+  );
+
+  ctx.lineTo(
+    13,
+    12
+  );
+
+  ctx.closePath();
+
+  ctx.fill();
+
+
+  /* PARTICLES */
+
+  for (
+    let i = 0;
+    i < 34;
+    i++
+  ) {
+
+    const t =
+      Math.random();
+
+    const y =
+      20 +
+      t * trailLen;
+
+    const spread =
+      3 +
+      t * 18;
+
+    const x =
+      (
+        Math.random() - .5
+      ) *
+      spread;
+
+    const r =
+      .8 +
+      Math.random() *
+      2.3 *
+      (1 - t);
+
+    ctx.globalAlpha =
+      (1 - t) * .55;
+
+    ctx.fillStyle =
+      i % 4 === 0
+        ? "#ffffff"
+        : "#58eaff";
+
+    ctx.beginPath();
+
+    ctx.arc(
+      x,
+      y,
+      r,
+      0,
+      Math.PI * 2
+    );
+
+    ctx.fill();
+
+  }
+
+  ctx.globalAlpha = 1;
+
+
+  /* SHIP GLOW */
+
+  ctx.shadowBlur = 34;
+
+  ctx.shadowColor =
+    "#35eaff";
+
+  ctx.fillStyle =
+    "#39dfff";
+
+  ctx.beginPath();
+
+  ctx.moveTo(
+    0,
+    -32
+  );
+
+  ctx.lineTo(
+    25,
+    18
+  );
+
+  ctx.lineTo(
+    9,
+    13
+  );
+
+  ctx.lineTo(
+    0,
+    25
+  );
+
+  ctx.lineTo(
+    -9,
+    13
+  );
+
+  ctx.lineTo(
+    -25,
+    18
+  );
+
+  ctx.closePath();
+
+  ctx.fill();
+
+
+  /* BODY */
+
+  ctx.shadowBlur = 0;
+
+  const body =
+    ctx.createLinearGradient(
+      -20,
+      -25,
+      20,
+      25
+    );
+
+  body.addColorStop(
+    0,
+    "#e9ffff"
+  );
+
+  body.addColorStop(
+    .28,
+    "#67eaff"
+  );
+
+  body.addColorStop(
+    .7,
+    "#1788c5"
+  );
+
+  body.addColorStop(
+    1,
+    "#075078"
+  );
+
+  ctx.fillStyle =
+    body;
+
+  ctx.beginPath();
+
+  ctx.moveTo(
+    0,
+    -27
+  );
+
+  ctx.lineTo(
+    17,
+    15
+  );
+
+  ctx.lineTo(
+    0,
+    8
+  );
+
+  ctx.lineTo(
+    -17,
+    15
+  );
+
+  ctx.closePath();
+
+  ctx.fill();
+
+
+  /* WINGS */
+
+  ctx.fillStyle =
+    "#0d5c91";
+
+  ctx.beginPath();
+
+  ctx.moveTo(
+    -7,
+    4
+  );
+
+  ctx.lineTo(
+    -27,
+    20
+  );
+
+  ctx.lineTo(
+    -11,
+    16
+  );
+
+  ctx.closePath();
+
+  ctx.fill();
+
+
+  ctx.beginPath();
+
+  ctx.moveTo(
+    7,
+    4
+  );
+
+  ctx.lineTo(
+    27,
+    20
+  );
+
+  ctx.lineTo(
+    11,
+    16
+  );
+
+  ctx.closePath();
+
+  ctx.fill();
+
+
+  /* COCKPIT */
+
+  ctx.shadowBlur = 12;
+
+  ctx.shadowColor =
+    "#bfffff";
+
+  ctx.fillStyle =
+    "#102d62";
+
+  ctx.beginPath();
+
+  ctx.ellipse(
+    0,
+    -9,
+    8,
+    11,
+    0,
+    0,
+    Math.PI * 2
+  );
+
+  ctx.fill();
+
+  ctx.fillStyle =
+    "#c9fbff";
+
+  ctx.globalAlpha = .75;
+
+  ctx.beginPath();
+
+  ctx.ellipse(
+    -2,
+    -12,
+    3,
+    6,
+    -.25,
+    0,
+    Math.PI * 2
+  );
+
+  ctx.fill();
+
+  ctx.globalAlpha = 1;
+
+
+  /* ENGINES */
+
+  ctx.shadowBlur = 18;
+
+  ctx.shadowColor =
+    "#fff";
+
+  ctx.fillStyle =
+    "#ffffff";
+
+  ctx.beginPath();
+
+  ctx.arc(
+    -8,
+    16,
+    3,
+    0,
+    Math.PI * 2
+  );
+
+  ctx.fill();
+
+  ctx.beginPath();
+
+  ctx.arc(
+    8,
+    16,
+    3,
+    0,
+    Math.PI * 2
+  );
+
+  ctx.fill();
+
+  ctx.restore();
+
+}
+
+
+/* =========================
+   METEORS
+========================= */
+
+function drawMeteor(m) {
+
+  ctx.save();
+
+  ctx.translate(
+    m.x,
+    m.y
+  );
+
+  ctx.rotate(
+    m.rot
+  );
+
+
+  /* DUST TRAIL */
+
+  const trail =
+    ctx.createLinearGradient(
+      0,
+      -m.r * 4,
+      0,
+      m.r * .2
+    );
+
+  trail.addColorStop(
+    0,
+    "rgba(255,55,70,0)"
+  );
+
+  trail.addColorStop(
+    .55,
+    "rgba(255,75,55,.10)"
+  );
+
+  trail.addColorStop(
+    1,
+    "rgba(255,125,55,.42)"
+  );
+
+  ctx.fillStyle =
+    trail;
+
+  ctx.beginPath();
+
+  ctx.moveTo(
+    -m.r * .45,
+    0
+  );
+
+  ctx.lineTo(
+    -m.r * .14,
+    -m.r * 4
+  );
+
+  ctx.lineTo(
+    m.r * .14,
+    -m.r * 4
+  );
+
+  ctx.lineTo(
+    m.r * .45,
+    0
+  );
+
+  ctx.closePath();
+
+  ctx.fill();
+
+
+  /* ROCK */
+
+  ctx.shadowBlur = 28;
+
+  ctx.shadowColor =
+    "#ff304f";
+
+  const rock =
+    ctx.createRadialGradient(
+      -m.r * .28,
+      -m.r * .35,
+      m.r * .05,
+      0,
+      0,
+      m.r * 1.15
+    );
+
+  rock.addColorStop(
+    0,
+    "#ffd06a"
+  );
+
+  rock.addColorStop(
+    .25,
+    "#ff7544"
+  );
+
+  rock.addColorStop(
+    .62,
+    "#d33245"
+  );
+
+  rock.addColorStop(
+    1,
+    "#48162b"
+  );
+
+  ctx.fillStyle =
+    rock;
+
+
+  const points = 11;
+
+  ctx.beginPath();
+
+  for (
+    let i = 0;
+    i < points;
+    i++
+  ) {
+
+    const a =
+      i *
+      Math.PI *
+      2 /
+      points;
+
+    const rr =
+      m.r *
+      (
+        .74 +
+        .18 *
+        Math.sin(
+          i * 4.7 +
+          m.seed
+        ) +
+        .08 *
+        Math.sin(
+          i * 9.1
+        )
+      );
+
+    const x =
+      Math.cos(a) * rr;
+
+    const y =
+      Math.sin(a) * rr;
+
+    if (i === 0)
+      ctx.moveTo(
+        x,
+        y
+      );
+    else
+      ctx.lineTo(
+        x,
+        y
+      );
+
+  }
+
+  ctx.closePath();
+
+  ctx.fill();
+
+  ctx.shadowBlur = 0;
+
+
+  /* THREE DARK DOTS */
+
+  const dots = [
+
+    [-.27, -.28, .13],
+
+    [.31, -.08, .105],
+
+    [-.02, .39, .09]
+
+  ];
+
+
+  for (
+    const [
+      dx,
+      dy,
+      dr
+    ]
+    of dots
+  ) {
+
+    const cx =
+      dx * m.r;
+
+    const cy =
+      dy * m.r;
+
+    const cr =
+      dr * m.r;
+
+
+    ctx.fillStyle =
+      "rgba(35,12,24,.88)";
+
+    ctx.beginPath();
+
+    ctx.arc(
+      cx,
+      cy,
+      cr * 1.25,
+      0,
+      Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    const dg =
+      ctx.createRadialGradient(
+        cx - cr * .35,
+        cy - cr * .35,
+        .2,
+        cx,
+        cy,
+        cr
+      );
+
+    dg.addColorStop(
+      0,
+      "rgba(10,5,12,.95)"
+    );
+
+    dg.addColorStop(
+      .7,
+      "rgba(45,14,27,.9)"
+    );
+
+    dg.addColorStop(
+      1,
+      "rgba(120,38,48,.4)"
+    );
+
+    ctx.fillStyle = dg;
+
+    ctx.beginPath();
+
+    ctx.arc(
+      cx,
+      cy,
+      cr,
+      0,
+      Math.PI * 2
+    );
+
+    ctx.fill();
+
+  }
+
+
+  /* ROCKY FLECKS */
+
+  ctx.globalAlpha = .5;
+
+  for (
+    let i = 0;
+    i < 7;
+    i++
+  ) {
+
+    const a =
+      i * 2.2 +
+      (m.seed || 0);
+
+    const d =
+      m.r *
+      (
+        .2 +
+        ((i * 29) % 60) /
+        100
+      );
+
+    ctx.fillStyle =
+      i % 2
+        ? "#ff9b62"
+        : "#741f37";
+
+    ctx.beginPath();
+
+    ctx.arc(
+      Math.cos(a) * d,
+      Math.sin(a) * d,
+      .7 + (i % 3) * .35,
+      0,
+      Math.PI * 2
+    );
+
+    ctx.fill();
+
+  }
+
+  ctx.globalAlpha = 1;
+
+
+  /* GLOWING SEAMS */
+
+  ctx.strokeStyle =
+    "#ffad55";
+
+  ctx.shadowBlur = 8;
+
+  ctx.shadowColor =
+    "#ff4d32";
+
+  ctx.lineWidth =
+    Math.max(
+      1,
+      m.r * .045
+    );
+
+  ctx.globalAlpha = .65;
+
+  for (
+    let i = 0;
+    i < 2;
+    i++
+  ) {
+
+    const a =
+      -1.7 +
+      i * 2.1 +
+      (m.seed || 0);
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+      Math.cos(a) *
+      m.r *
+      .1,
+
+      Math.sin(a) *
+      m.r *
+      .1
+    );
+
+    ctx.lineTo(
+      Math.cos(a + .23) *
+      m.r *
+      .7,
+
+      Math.sin(a + .23) *
+      m.r *
+      .7
+    );
+
+    ctx.stroke();
+
+  }
+
+  ctx.restore();
+
+}
+
+
+/* =========================
+   MAIN GAME LOOP
+========================= */
+
+function loop(now) {
+
+  if (!running)
+    return;
+
+
+  const dt =
+    Math.min(
+      (now - last) / 1000,
+      .033
+    );
+
+  last = now;
+
+
+  /* SURVIVAL TIMER */
+
+  survivalTime += dt;
+
+  document.getElementById(
+    "time"
+  ).textContent =
+    "Time: " +
+    survivalTime.toFixed(1) +
+    "s";
+
+
+  /* BEST TIME */
+
+  if (
+    survivalTime >
+    bestTime
+  ) {
+
+    bestTime =
+      survivalTime;
+
+    localStorage.neonDodgeBestTime =
+      bestTime;
+
+    document.getElementById(
+      "bestTime"
+    ).textContent =
+      "Best Time: " +
+      bestTime.toFixed(1) +
+      "s";
+
+  }
+
+
+  /* AI DIFFICULTY */
+
+  speed =
+    1 +
+    Math.min(
+      score / 520,
+      2.7
+    );
+
+
+  /* AI LEVEL */
+
+  const aiLevel =
+    score < 10
+      ? "CALM"
+      : score < 25
+        ? "ALERT"
+        : score < 45
+          ? "HUNTING"
+          : score < 70
+            ? "RUTHLESS"
+            : "NIGHTMARE";
+
+
+  aiEl.textContent =
+    "AI: " +
+    aiLevel;
+
+
+  /* CAMERA MOVEMENT */
+
+  const shake =
+    (speed - 1) *
+    2;
+}
